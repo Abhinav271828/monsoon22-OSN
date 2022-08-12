@@ -34,3 +34,7 @@ Notes and resources for the Operating Systems and Networks course at IIIT Hydera
             - I/O Structure
             - Protection from Errors
             - General Operation
+* Week 3
+    * Lecture 4 (12 August, Friday)
+        - Different Kinds of Systems
+        - Operating System Interface
