@@ -2,7 +2,7 @@
 Notes and resources for the Operating Systems and Networks course at IIIT Hyderabad.
 
 # Course Outline
-- [ ] Introduction (2)
+- [x] Introduction (2)
 - [ ] Process and Thread Management (4)
 - [ ] CPU Scheduling (2)
 - [ ] Process Synchronisation (3)
@@ -38,3 +38,11 @@ Notes and resources for the Operating Systems and Networks course at IIIT Hydera
     * Lecture 4 (12 August, Friday)
         - Different Kinds of Systems
         - Operating System Interface
+* Week 4
+    * Lecture 5 (16 August, Tuesday)
+        - System Design
+            - Mechanisms and Policies
+            - Implementation
+        - Structure of OSs
+        - Virtual Machines
+        - Process Concepts
