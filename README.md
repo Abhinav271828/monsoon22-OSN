@@ -46,3 +46,8 @@ Notes and resources for the Operating Systems and Networks course at IIIT Hydera
         - Structure of OSs
         - Virtual Machines
         - Process Concepts
+    * Lecture 6 (19 August, Friday)
+        - Process Concepts (contd.)
+            - Process Scheduling Queues
+            - Schedulers
+            - Process Creation
