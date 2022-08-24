@@ -51,3 +51,11 @@ Notes and resources for the Operating Systems and Networks course at IIIT Hydera
             - Process Scheduling Queues
             - Schedulers
             - Process Creation
+* Week 5
+    * Lecture 7 (23 August, Tuesday)
+        - Process Concepts (contd.)
+            - Inter-Process Communication
+            - Client-Server Communication
+        - Multithreaded Programming
+            - Processes and Threads
+            - Issues
