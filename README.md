@@ -56,6 +56,12 @@ Notes and resources for the Operating Systems and Networks course at IIIT Hydera
         - Process Concepts (contd.)
             - Inter-Process Communication
             - Client-Server Communication
-        - Multithreaded Programming
-            - Processes and Threads
-            - Issues
+            - Multithreaded Programming
+                - Processes and Threads
+                - Issues
+* Week 6
+    * Lecture 8 (30 August, Tuesday)
+        - Process Concepts (contd.)
+            - Scheduling
+
+[Professor did not allow students to take notes in class beyond this point. Refer to `notes.md` for notes taken from textbook.]

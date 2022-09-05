@@ -22,8 +22,8 @@ RPCs have many issues – the netwrok may run into errors, the procedure call m
 ## Pipes
 Pipes act as a conduit for two processes to communicate. Ordinarily, they are unidirectional; one end is reserved for the producer process, and the other for the consumer process. It requires that the processes that are communicating have a parent-child relationship, and cannot be accessed by other processes.
 
-# Multithreaded Programming
-## Processes and Threads
+## Multithreaded Programming
+### Processes and Threads
 A process has two characteristics – resource ownership (like virtual address spaces, I/O channels, main memory) and execution (which follows a *trace*). These two characteristics are independent.  
 The unit of dispatching or execution is called a *thread*, while the unit of resource ownership is called a *process* or a *task*.
 
@@ -48,7 +48,7 @@ Now, scheduling and dispatching occurs at the thread level. The main system call
 
 There are two types of threads: user-level and kernel-level. As the names suggest, the former are managed and scheduled by application programs, while the kernel handles the latter. The user-level threads are mapped to kernel-level threads – this may be a many-to-one, one-to-one, or many-to-many mapping.
 
-## Issues
+### Issues
 One major issue with multithreading is that the semantics of the `fork()` and `exec()` syscalls now change. If a single thread calls `fork()`, should the new process contain a single thread, or all the threads?
 
 Sometimes a thread needs to be terminated before it completes, depending on the progress of the other threads in the process; a common example is searching a database.
