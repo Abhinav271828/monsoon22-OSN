@@ -496,3 +496,99 @@ The first kind of system is called a *no buffering system*, while the latter two
 [p. 130-6]
 
 ### 3.6 Communication in Client-Server Systems
+As well as the methods below (sockets, RPCs and pipes), shared memory and message passing can be used in client-server systems.
+
+#### Sockets
+A *socket* is an endpoint for communication, and a pair of communicating processes uses a pair of sockets. A socket is identified by an IP address and a port number.
+
+A server waits for incoming client requests by listening to a specified port; once received, the server accepts a connection from the client socket. Specific services, like telnet, FTP and HTTP, listen to specific ports. Ports below 1024 are considered well-known and can be used for standard services; those above 1024 are assigned (uniquely) to client processes initiating requests.
+
+A client and server on the same system can communicate through the *loopback* IP address `127.0.0.1`.
+
+This paradigm is considered a low-level form of communication, since sockets only allow an unstructured stream of bytes to be exchanged.
+
+#### Remote Procedure Calls
+This paradigm is an abstraction of the procedure-call mechanism for use between two systems part of the same network. It is generally based on a message-passing system.
+
+The messages exchanged in RPC communication are well-structured. Each is addressed to an RPC daemon listening to a port on the remote system, and contains an identifier with the function to be executed and its parameters. The output of this function is sent back to the requester in another message.
+
+The RPC system hides the details of communication by providing one *stub* on the client side for each remote procedure, which locates the server port, *marshals* the parameters (converts them to transmittable form) and sending the message via message passing. A stub on the server side receives the message and invokes the procedure.
+
+To avoid issues presented by discrepancies in data representation, many RPC systems define an *external data representation* (XDR), to and from which the data is converted during marshalling.  
+RPCs can also fail or be re-executed due to network issues – this is avoided by ensuring that messages are acted on *exactly once*, which is accomplished by `ACK` messages acknowledging receipt and keeping track of the timestamps of messages.  
+The client and server also need to know each other's ports to communicate. This is achieved by either fixing the port after compile time, or running a *matchmaker* daemon that provides the port number of the recipient to the sender.
+
+#### Pipes
+A pipe acts as a conduit for two processes to communicate. They are relatively simple, but have some limitations. There are four important parameters:
+
+* is the communication bidirectional or unidirectional?
+* if bidirectional, is it half-duplex or full-duplex?
+* do the processes need to be related?
+* can the pipes communicate across a network?
+
+##### Ordinary Pipes
+Ordinary pipes allow two processes to communicate in a standard producer-consumer fashion – they have a *read-end* and a *write-end*. They therefore allow only one-way communication between a parent process and its child.
+
+##### Named Pipes
+Named pipes are much more powerful, as they allow bidirectional communication between an arbitrary pair of processes. Several processes can use a named pipe for communication once it is created – it is not tied to any one pair.
+
+## Chapter 4: Threads
+Most modern OSs allow a process to contain multiple threads of control.
+
+### 4.1 Overview
+A thread is a basic unit of CPU utilisation. It consists of a thread ID, a program counter, a register set and a stack. It shares its code, data and resources with other threads of the same process.
+
+A process with a single thread is called a traditional or *heavyweight* process.
+
+#### Motivation
+An application is typically implemented as a process with several threads of control. They may also need to leverage the processing capabilities of multicore systems, or perform several similar tasks.
+
+Process creation is one method that was common before threads – a server runs as a single process and creates new processes to service requests it receives. However, this is time-consuming and resource-intensive.
+
+RPC servers also tend to be multithreaded – they service each message they receive using a separate thread, allowing them to service several concurrent requests.
+
+#### Benefits
+There are four major kinds of benefits of multithreaded programming:
+
+* responsiveness – an application can continue even if part of it is blocked or busy.
+* resource sharing – threads share resources and memory by default.
+* economy – creating and switching between processes is much more expensive that the corresponding operations on threads.
+* scalability – multithreading exploits multicore systems.
+
+### 4.2 Multicore Programming
+Multithreaded programming provides a mechanism for more efficient use of multiple computing cores and improved concurrency.
+
+*Parallelism* is a characteristic of systems that can perform more than one task simultaneously; *concurrency* is a characteristic of systems that support more than one task and allow all the make progress. It is therefore possible to have concurrency without parallelism.
+
+Modern systems support more than one thread per core.
+
+#### Programming Challenges
+There are five main categories of challenges to multicore programming:
+
+* identifying tasks – find areas that can be divided into separate tasks.
+* balance – ensure that the tasks provide equally valuable work.
+* data splitting
+* data dependency
+* testing and debugging
+
+#### Types of Parallelism
+There are two main types of parallelism – *data parallelism* and *class parallelism*. Data parallelism involves distributing subsets of the same data across cores and performing the same operation on all of them; task parallelism distributes threads across cores, each performing a unique task.
+
+### 4.3 Multithreading Models
+Threads may be supported as *user threads* (supported above the kernel without its support) or *kernel threads* (supported and managed directly by the OS).
+
+#### Many-to-One Model
+In this model, many user-level threads are mapped to one kernel thread. Thread management is done in user space, which is efficient. However, if a single thread makes a blocking system call, the entire process will block.  
+This model is not popular due to its inability to take advantage of multiple cores.
+
+#### One-to-One Model
+Here, each user thread is mapped to one kernel thread, which provides more concurrency. Its only drawback is that overhead of creating a new kernel thread worsens the performance of applications – most systems implementing this model limit the number of threads a single application can create.
+
+#### Many-to-Many Model
+Here, a number of user-level threads is mapped to a smaller or equal number of kernel threads. The exact number of kernel threads may be specific to the application and the machine.
+
+This model allows developers to create as many threads as necessary, while the corresponding kernel threads carry out true parallelism on a multiprocessor.
+
+A variation of this model, the *two-level model*, allows for this mapping but also lets a user-level thread be bound to a single kernel thread.
+
+### 4.4 Thread Libraries
