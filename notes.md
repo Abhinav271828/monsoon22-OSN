@@ -817,3 +817,213 @@ It can be implemented in either software or hardware.
 #### Functional Programming Languages
 
 ### 5.11 Summary
+
+## Chapter 6: CPU Scheduling
+CPU scheduling is essential to multiprogrammed OSs.
+
+### 6.1 Basic Concepts
+The objective of multiprogramming is to maximise CPU utilisation by having some process running at all times.
+
+#### CPU-I/O Burst Cycle
+One property of processes is necessary for the success of CPU scheduling – the fact that they consist of a cycle of CPU execution and I/O wait, and alternate between these states. An interval during which the CPU is used is called a *CPU burst*; there tend to be very few long CPU bursts and large number of short ones.
+
+#### CPU Scheduler
+The *short-term scheduler*, or CPU scheduler, selects a process from among the processes in memory and allocates the CPU to it. The processes (more accurately, their PCBs) in memory therefore form a queue, but not necessarily a FIFO one.
+
+#### Preemptive Scheduling
+CPU-scheduling decisions may take place when a process switches to or from the running state, or when it terminates.
+
+If a process terminates or goes from running to waiting, then the scheduler *must* select a new process for execution; there is no choice in these situations. This is *nonpreemptive* or *cooperative* scheduling.
+
+*Preemptive scheduling* is more advanced, and requires some special hardware (like a timer) to be implemented. However, it can result in race conditions when several processes share data (see Chapter 5). Preemption also affects the design of the kernel.
+
+#### Dispatcher
+The dispatcher is a module that gives control of the CPU to the process selected by the STS. This involves:
+
+* switching context
+* switching to user mode
+* jumping to the proper location in the user program
+
+The dispatcher should be as fast as possible. The interval between the stopping of one process and the starting of another is called the *dispatch latency*.
+
+### 6.2 Scheduling Criteria
+The potential criteria to be considered during scheduling are:
+
+* CPU utilisation: It should range from 40% to 90% in a real system.
+* Throughput
+* Turnaround time: This is the sum of the periods spent waiting to get into memory, waiting in the ready queue, executing on the CPU and doing I/O.
+* Waiting time
+* Response time: This is the time from the submission of the request until the first repsonse is produced.
+
+In most cases, we optimise average of a quantity across all users. However, we may wish to optimise the maximum or minimum instead.
+
+### 6.3 Scheduling Algorithms
+#### First-Come First-Served Scheduling
+FCFS is the simplest CPU-scheduling algorithm, where the ready queue is implemented as a normal FIFO queue.
+
+The average waiting time under an FCFS policy is generally not minimal and may vary substantially.  
+Furthermore, it causes a *convoy effect*, where a large number of processes wait for one big process to finish a CPU burst.
+
+This algorithm is nonpreemptive, and therefore unsuitable for time-sharing systems.
+
+#### Shortest-Job-First Scheduling
+The SJF algorithm associates with each process the length of its next CPU burst.
+
+This algorithm is provably optimal – it gives the minimum average waiting time for any given set of processes. However, the difficulty lies in identifying the length of the next burst. While this is given by the user in the case of the LTS, the CPU scheduler needs to predict it; it usually takes an exponential average of the previous CPU bursts. In other words, we predict
+$$\tau_{n+1} = \alpha t_n + (1 - \alpha) \tau_n,$$
+where $\alpha$ is a parameter that controls the relative weight of history in the prediction. We can understand its behaviour better by writing it as
+$$\begin{split}
+\tau_{n+1} &= \alpha t_n + (1-\alpha)\alpha t_{n-1} + \cdots + (1-\alpha)^{n+1} \tau_0 \\
+&= \sum_{i=0}^n (1-\alpha)^i \alpha t_{n-i}.
+\end{split}$$
+
+The SJF policy can be preemptive or nonpreemptive, depending on its treatment of processes arriving in the ready queue while a previous process is still executing. Preemptive SJF scheduling is sometimes called *shortest-remaining-time-first* scheduling.
+
+#### Priority Scheduling
+Priority scheduling is a generalised form of SJF – processes are associated with *priorities*, which determine the order in which the CPU is allocated to them. These priorities can be defined internally (memory requirements, number of open files, etc.) or externally (importance, funds, etc.).
+
+As with SJF, priority scheduling can be preemptive or nonpreemptive.
+
+A major problem with priority-scheduling algorithms is *indefinite blocking*, or *starvation*, where a low-priority process may be continually blocked by a stream of high-priority processes. This is fixed by *aging*, *i.e.*, increasing the priority of processes that have been waiting in the system.
+
+#### Round-Robin Scheduling
+The round-robin scheduling algorithm, specifically designed for time-sharing systems, is similar to FCFS but preemptive. A *time quantum* or *time slice* is defined, and the scheduler goes around the ready queue (which is a circular queue), allocating the CPU to each process for [up to] one quantum. No process is allocated more than one quantum in a row, unless it is the only runnable process.  
+The upper bound on the waiting time is $(n-1)q$ units.
+
+Typically, deciding the time quantum is a tradeoff between waiting time and CPU utilisation – a large time quantum leads to a large waiting time but less context-switching time. A general heuristic is that 80% of the CPU bursts should be shorter than $q$.
+
+#### Multilevel Queue Scheduling
+If processes are easily classified into different groups (*e.g.*, foreground and background), a multilevel queue scheduling algorithm can be used. Each queue in such a system has its own algorithm, and there is a common algorithm for scheduling among queues (usually fixed-priority preemptive scheduling or time-slicing).
+
+An example of a multilevel queue scheduling algorithm is one with five queues:
+
+* System processes
+* Interactive processes
+* Interactive editing processes
+* Batch processes
+* Student processes
+
+#### Multilevel Feedback Queue Scheduling
+This is a modification of multilevel queue scheduling that allows a process to move between queues. Higher-priority processes that do not complete in their allocated time can be shifted to the tail of lower-priority queues. This automatically gives highest priority to processes with shorter CPU bursts.
+
+A multilevel feedback queue scheduler is generally defined by the following parameters:
+
+* the number of queues
+* the scheduling algorithm for each queue
+* the upgrade criterion
+* the downgrade criterion
+* the method to determine which queue receives a new process
+
+### 6.4 Thread Scheduling
+Here, we consider scheduling issues for both user-level and kernel-level threads.
+
+#### Contention Scope
+User-level and kernel-level threads may be distinguished by how they are scheduled.
+
+On many-to-one and many-to-many systems, the thread library schedules user threads to run on an available LWP – this is called *process-contention scope* or PCS, (since competition for the CPU takes place among threads of a single process). On the other hand, the kernel schedules (kernel-level) threads onto the CPU using *system-contention scope* (SCS).
+
+PCS is typically done according to priority, which in the case of user-level threads is set by the programmer. It is usually preemptive, however.
+
+#### Pthread Scheduling
+[p. 301-2]
+
+### 6.5 Multiple-Processor Scheduling
+The availability of multiple CPUs makes *load sharing* possible, but brings with it increased complexity. We will consider some issues in the case where the processors are all identical in terms of functionality (SMP).
+
+#### Approaches to Multiple-Processor Scheduling
+Multiple-processor scheduling may be *asymmetric* (one master server handling all system activities and scheduling decision) or *symmetric* (each processor is self-scheduling).
+
+In the case of symmetric multiprocessing (SMP), the processors may have their own ready queues or there may be a common ready queue.
+
+#### Processor Affinity
+If a process has been running on a certain processor, the cache of that processor is populated with that process's data. If the process now migrates to another processor, the data must be invalidated from one cache and repopulated in another, which is an expensive operation – thus most systems try to avoid migrating processes. This is called *processor affinity*.
+
+Affinity may be *soft* (there is no guarantee about process migration) or *hard* (a process specifies a subset of processors on which it may run).
+
+#### Load Balancing
+Load balancing attempts to keep the workload evenly distributed across processors in an SMP system; it is typically necessary, however, only in systems where each processor has its own private ready queue (which is the more common kind of SMP).
+
+Load balancing may be done via *push migration* or *pull migration*. Push migration involves a specific task periodically checking the load on each processor, and redistributing processes accordinly. Pull migration entails each processor pulling waiting tasks from busier ones when it is idle. These two approaches, however, are often implemented in parallel.
+
+#### Multicore Processors
+A single chip may include several processor cores; this saves time and power. This may complicate scheduling issues. For example, a processor may need to shift to another thread when the running thread has a memory stall – thus, multiple hardware threads are assigned to a single core, each appearing as a logical processor to the OS.
+
+Multithreading on a processor core may be *coarse-* (a thread executes until a long-latency event) or *fine-grained* (the processor switches between threads at every instruction cycle).
+
+Note that multicore multithreading involves two levels of scheduling – each hardware thread deciding which software thread to run, and each core deciding which hardware thread to run.
+
+### 6.6 Real-Time CPU Scheduling
+A real-time system may be *soft* or *hard* – a soft real-time system gives no guarantee when a critical process will be run, while a hard real-time system has stricter requirements.
+
+#### Minimising Latency
+Real-time systems tend to be event-driven. The time period between an event occurring and being serviced is called the *event latency*.
+
+There are two main types of latencies affecting RTSs – *interrupt latency* (where the event involved is an interupt) and *dispatch latency* (the time taken to stop a process and start another).  
+Interrupt latency is the sum of the times taken to complete the current instruction, determine the type of interrupt, save the state of the process, and call the ISR. Interrupt latency must be bounded in the case of hard RTSs; furthermore, interrupts cannot be kept disabled for too long.  
+Dispatch latency has two components: preemption of the running process, and release of resources by low-priority processes.
+
+#### Priority-Based Scheduling
+Since an RTS needs to respond to new processes immediately, it must support a priority-based algorithm with preemption. However, this only satisfies the requirements for a soft real-time system; hard real-time systems need to ensure that deadline constraints, etc., are met. We will consider some algorithms meeting these needs (rate-monotonic scheduling, earliest-deadline-first scheduling, and proportional share scheduling).
+
+Processes being submitted to the scheduler are assumed to be periodic, requiring the CPU at intervals of $p$ units, during which it has a fixed processing time $t$ and a deadline $d$. These quantities are related as $0 \leq t \leq d \leq p$. The rate of the process is defined as $\frac1p$.
+
+A process may need to announce its deadline requests to the scheduler; then the scheduler uses an *admission-control algorithm* to admit it with a guarantee of completion, or reject it if it is impossible.
+
+#### Rate-Monotonic Scheduling
+This algorithm schedules periodic tasks using a static priority policy with preemption. Each task is assigned a priority that depends inversely on its period – thus tasks that require the CPU more often have higher priority.
+
+Rate-monotonic scheduling is optimal, in the sense that if it cannot schedule a set of processes, no other (static-priority) algorithm can. However, it imposes an upper limit on CPU utilisation, equal to $n \cdot (2^\frac1n - 1)$ for $n$ processes. This is asymptotically equal to about 69%.
+
+#### Earliest-Deadline-First Scheduling
+This algorithm *dynamically* assigns priorities according to the deadline; when a process becomes runnable, it must announce its deadline requirements to the system, and then priorities are adjusted to reflect the change.
+
+This algorithm does not constrain processes to be periodic, or to require a constant amount of CPU time per burst – they only need to announce their deadlines when they become runnable. If we ignore practical overheads like context switching and interrupt handling, it makes 100% CPU utilisation possible.
+
+#### Proportional Share Scheduling
+A scheduler implementing proportional share scheduling partitions a total of $T$ shares among all processes, and uses an admission-control policy to guarantee that a task receives its share.
+
+#### POSIX Real-Time Scheduling
+
+### 6.7 Operating-System Examples
+#### Example: Linux Scheduler
+#### Example: Windows Scheduling
+#### Example: Solaris Scheduling
+
+### 6.8 Algorithm Evaluation
+We can use several criteria to evaluate algorithms, like CPU utilisation or throughput. We will consider the various evaluation methods we can use.
+
+#### Deterministic Modelling
+This method is a type of *analytic evalution* (using a formula to evaluate the performance of a given algorithm on a given workload). It is simple and fast, and produces exact numbers; however, it requires exact numbers for input.
+
+#### Queueing Models
+We can measure and approximate the distributions of CPU and I/O bursts, and of arrival times, of processes. From these distributions we can calculate the average throughput, utilisation, waiting time, etc. This is called *queuing-network analysis*.
+
+Let $n$ be the average queue length, $W$ the average waiting time, and $\lambda$ the average arrival rate. These quantities are related as $n = \lambda W$ (Little's formula).
+
+Queuing analysis, however, can only handle a limited number of algorithms and distributions, and can become unmanageably complex. Simplicity of these models generally comes at the cost of accuracy and realistic assumptions.
+
+#### Simulations
+We can use RNGs set to imitate observed probability distributions. *Trace tapes* can also be used to record sequences of actual events and drive simulations.
+
+#### Implementation
+
+### 6.9 Summary
+
+## Chapter 7: Deadlocks
+A deadlock is a situation in which a process, having entered the waiting state, is unable to leave it.
+
+### 7.1 System Model
+
+### 7.2 Deadlock Characterisation
+
+### 7.3 Methods for Handling Deadlocks
+
+### 7.4 Deadlock Prevention
+
+### 7.5 Deadlock Avoidance
+
+### 7.6 Deadlock Detection
+
+### 7.7 Recovery from Deadlock
+
+### 7.8 Summary
