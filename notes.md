@@ -1013,17 +1013,122 @@ We can use RNGs set to imitate observed probability distributions. *Trace tapes*
 A deadlock is a situation in which a process, having entered the waiting state, is unable to leave it.
 
 ### 7.1 System Model
+The resources an OS has to distribute among the processes may be partitioned into a number of types, each containing identical instances (for example, CPU cycles, files, etc.). A process requesting an instance of a resource type can be allocated *any* instance of it.
+
+In order to use a resource, a process must first request it and release it afterwards. The request and release of resources may be system calls – a system table records the status (free or allocated) of each resource. Each resource has a queue of processes waiting for it.
+
+A set of processes is deadlocked when every process in the set is waiting for an event that can only be caused by another process in the set (usually resource acquisition or release).
 
 ### 7.2 Deadlock Characterisation
+#### Necessary Conditions
+The following four conditions are needed for a deadlock to arise in a system:
+
+* Mutual exclusion: At least one resource mus be nonshareable (if one process requests it while another is holding it, the requesting process is delayed).
+* Hold and wait: A process must be holding some resources and waiting to acquire some others.
+* No preemption: Resources cannot be released by processes other than the one holding them.
+* Circular wait: A set $\{P_0, \dots, P_n\}$ of processes must be such that $P_i$ is waiting for a resource held by $P_{(i+1) \mod n}$.
+
+#### Resource-Allocation Graph
+The resource-allocation graph describes the state of resources in the system. The vertices represent the processes and resources, and edges denote requests (going from processes to resources) and allocations or assignments (going from resources to processes).  
+It can be shown that if there is a deadlock in the system, then there is a cycle in the graph (but the converse does not hold).
+
+The presence of a cycle is always a necessary condition for a deadlock. It is also sufficient in the case where each resource type has exactly one instance.
 
 ### 7.3 Methods for Handling Deadlocks
+The deadlock problem can, in general, be handled by
+
+* ensuring deadlocks never occur (prevention or avoidance)
+* allowing them to occur, but enabling the system to detect and recover from them
+* ignoring them
+
+*Deadlock prevention* provides a way to ensure that at least one of the four conditions for a deadlock cannot hold – thus it constrains the requests that can be made for resources.  
+*Deadlock avoidance* needs the OS to have a priori information about the maximum resources a process can request.
+
+A deadlock can arise if neither prevention nor avoidance is implemented. Such systems can detect and recover from deadlocks when they do occur.
 
 ### 7.4 Deadlock Prevention
+#### Mutual Exclusion
+We cannot deny this condition, since some resources are intrinsically nonshareable.
+
+#### Hold and Wait
+This requires us to guarantee that a process requesting a resource not hold any other resources – thus all the resources it needs should be allocated to it before it begins execution.
+
+Another protocol allows a process to request resources only when it has none (*i.e.*, it has released all the resources previously allocated to it).
+
+Both these protocols have two disadvantages – resource utilisation is low, and starvation is possible.
+
+#### No Preemption
+This condition can be negated by preempting all resources being held by a process that cannot be assigned its remaining needs. The process is resumed when it can be assigned all the resources it requires.
+
+#### Circular Wait
+One way to ensure that a circular wait never occurs is to impose a total ordering of resource types and to require processes to request them in that order. Formally, given a function $F : R \to \mathbb{N}$, we enforce that a process can request $R_j$ after $R_i$ iff $F(R_j) \geq (R_i)$. Further, if several instances of one type are needed, a single request must be issued.
+
+In an application program, we can accomplish this by ordering synchronisation objects like mutexes and locks.
 
 ### 7.5 Deadlock Avoidance
+We have seen that deadlock prevention can lead to low device utilisation and reduced throughput. Deadlock avoidance can be implemented by requiring extra information about resources being requested, *e.g.*, the order in which the resources will be requested.
+
+The simplest model for this approach requries the maximum number of resources of each type that each process needs. The algorithm then dynamically examines the resource-allocation state to avoid a circular-wait situation.
+
+#### Safe State
+A state is safe if the system can allocate resources to each process in some order, while avoiding a deadlock. Formally, a system is in a safe state if the processes can be arranged in a *safe sequence* $\langle P_1, \dots, P_n \rangle$, where each $P_i$'s requests can be satisfied with the resources currently available *and* those held by all $P_{j < i}$.
+
+An OS can avoid a deadlock as long as the system is safe; if the system is in an unsafe state, the behaviour of the process determines the occurrence of deadlocks. We now design algorithms to ensure that the system never enters an unsafe state.
+
+Note that this may lower resource utilisation, since a process may have to wait for a resource that is, in fact, available.
+
+#### Resource-Allocation-Graph Algorithm
+If each resource type has only one instance, we can use a modification of the graph described earlier, adding a type of edge called a *claim edge* (indicating that a process may request a resource in the future). The resources must now be claimed a priori.
+
+Now, a request is granted only if converting the request edge to an assignment edge does not create a cycle in the graph. The presence of a cycle means that the system is in an unsafe state.
+
+#### Banker's Algorithm
+The above algorithm only works in the case where each resource type has only one instance. For the more general case, we use the following algorithm.
+
+When a new process enters the system, it declares the maximum number of instances of each resource type it needs. The algorithm maintains a vector `available[i]` (recording how many instances of $R_i$ are available), and matrices `max[i][j]` (recording the maximum demand by $P_i$ of $R_j$), `allocation[i][j]` (recording the allocation of $R_j$ to $P_i$), and `need[i][j]` (recording how much more of $R_j$ $P_i$ might need).
+
+Now, we use the following algorithm to check if a system is in a safe state.  
+We initialise `work = available` and `finish = repeat n false`. For each `i`, if `finish[i] == false` and `need[i] ≤ work`, then set `finish[i] = true` and `work += allocation[i]`. If `finish = repeat n true` now, the system is in a safe state.
+
+We then use the following algorithm to check if a request can be granted. Let `request[i]` be the request vector for process $P$; now, if `request[i] ≤ need[i]` and `request[i] ≤ available`, then "pretend" to allocate resources:
+```
+available -= request[i]
+allocation[i] += request[i]
+need[i] -= request[i]
+```
+and check if the resulting state is safe. If it is, proceed; else, $P_i$ must wait.
 
 ### 7.6 Deadlock Detection
+Note here that a detect-and-recovery scheme entails an overhead comprising not only the runtime costs of maintaining the necessary information but also the losses involved in recovery,
+
+#### Single Instance of Each Resource Type
+We use a variant of the resource-allocation graph called the *wait-for* graph, which has nodes only for processes and where an edge from $P_i$ to $P_j$ means that $P_i$ is waiting for $P_j$ to release some resource. A deadlock has occurred if the wait-for graph has a cycle; the system thus needs to examine this graph periodically.
+
+#### Several Instances of a Resource Type
+The algorithm for detecting deadlocks in this case is very similar to the banker's algorithm; the only difference is that `finish[i]` is initialised to `true` if `allocation[i] == 0`, and we check for `request[i] ≤ work` at each step. At the end, any process for which `finish[i] == false` is deadlocked.
+
+We reclaim the resources of $P_i$ when we know that `request[i] ≤ work`, since we know it is not involved in a deadlock, and we assume that it will not request any more resources later (if it does, the algorithm will detect it then).
+
+#### Detection-Algorithm Usage
+When we should invoke the deadlock detection algorithm depends on how often a deadlock is likely to occur, and how many processes will be affected by it when it happens.
+
+If deadlocks occur frequently, the algorithm should be invoked frequently.
+
+Since deadlocks only occur when a process makes a request that cannot be granted immediately, we can run the algorithm only when this happens.
 
 ### 7.7 Recovery from Deadlock
+One option for deadlock recovery is to allow the (human) operator to deal with it manually; if we wish to recover automatically, we can either abort one or more processes or preempt some resources from the deadlocked processes.
+
+#### Process Termination
+We can either abort all processes (this is very expensive and may cause processes to lose progress), or abort them one by one until the cycle is eliminated (this causes considerable overhead).
+
+If we go with partial termination, we are faced with the policy decision of which process is to be terminated first. Many factors influence this, like priority, runtime, resource usage, resource requirement, and so on.
+
+#### Resource Preemption
+There are three main issues to be addressed in this approach:
+
+* Selecting a victim: A process to take resources from has to be selected, as in process termination. The decision in this case involves many of the same factors.
+* Rollback: What do we do with a process whose resources have been preempted? It needs to be rolled back to a previous safe state, but it is usually simpler to roll it all the way back.
+* Starvation: The same process may always be picked as a victim, leading to starvation; the most common solution is to consider the number of rollbacks suffered so far in deciding which process to roll back.
 
 ### 7.8 Summary
