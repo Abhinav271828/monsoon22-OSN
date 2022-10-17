@@ -1132,3 +1132,161 @@ There are three main issues to be addressed in this approach:
 * Starvation: The same process may always be picked as a victim, leading to starvation; the most common solution is to consider the number of rollbacks suffered so far in deciding which process to roll back.
 
 ### 7.8 Summary
+
+# Part Three
+## Chapter 8: Main Memory
+We have seen that throughput and responsiveness can be increased by sharing the CPU among several processes, but this requires keeping all these processes in memory.
+
+### 8.1 Background
+We can here ignore how a program generates a memory address – we only care about the final sequence of addresses that a program generates.
+
+#### Basic Hardware
+Main memory and processor registers are the only form of general-purpose storage for the CPU. No machine instructions work with disk instructions.
+
+Registers are typically accessed in one cycle; main memory access may require the processor to stall. To avoid long gaps, we use caches between the processor and the main memory.
+
+The hardware compares every address generated with the base and limit registers to determine if it is valid. These registers can be loaded only by the OS, since only it operates in kernel mode.
+
+#### Address Binding
+We have seen that processes being executed need their code to be in main memory. All such processes waiting in main memory form the *input queue*.
+
+A user program starts with the addresses being referenced symbolically. Typically, the addresses are then bound to relative addresses by the compiler, and then to absolute addresses by the linker.  
+However, it may in fact happen at any stage. If the compiler does not know where the program is, it must generate relocatable code; if the program can be moved around during execution, then binding must be delayed even further.
+
+#### Logical vs. Physical Address Space
+Compile- or load-time binding usually generates identical physical and logical addresses, but runtime binding generates distinct ones. The mapping between the two spaces is carried out by the MMU; there are many methods to do this.
+
+The user program never sees the physical addresses; it deals only with virtal addresses.
+
+#### Dynamic Loading
+If the entire program has to be in the main memory for execution, this places a limit on its size. *Dynamic loading*, on the other hand, loads a routine only when it is to be called; they are otherwise kept on disk in a relocatable format.
+
+#### Dynamic Linking and Shared Libraries
+*Dynamically linked libraries* are those that are linked to programs only during runtime. Some OSs support *static linking* also, however.
+
+A *stub* is included in the image for each library-routine reference, which indicates how to loacte the actual routine.
+
+This is useful especially when the library is updated.
+
+### 8.2 Swapping
+A process can temporarily be *swapped* to a backing store and brought back to memory for execution.
+
+#### Standard Swapping
+The backing store is usually a fast disk, large enough to accommdate copies of all users' memory images. The system maintains a *ready queue* for the processes in the backing store that are ready to run. The dispatcher brings them to main memory to be run.
+
+The context-switch time overhead, however, is fairly high, being proportional to the amount of memory being swapped.  
+It also complicates I/O occurring from user memory. Either processes with such pending I/O should never be swapped, or the OS buffer should take care of such conflicts.
+
+#### Swapping on Mobile Systems
+
+### 8.3 Contiguous Memory Allocation
+Contiguous memory allocation is an early method to allocate main memory efficiently. Each process is held in a single section of memory contiguous to the next process's.
+
+#### Memory Protection
+For memory protection, we use the values of the base (or relocation) and limit registers as described before. This scheme allows the OS to change its size dynamically.
+
+#### Memory Allocation
+The *multiple-programming* method of allocating memory is to divide it into several partitions of fixed size, each of which can contain one process. However, this is no longer in use.
+
+A variation of this is the *variable-partition* scheme, which keeps a table indicating the free and occupied parts of memory. Processes are allocated memory some time after entering the system, and are then loaded into memory. In general, the available memory blocks form a set of holes of various sizes, and the OS searches for a hole big enough for the incoming process.  
+The *dynamic storage-allocation problem* concerns how to satisfy a request of size $n$ from a list of free holes. It can be solved by the following strategies:
+
+* First fit – Allocate the first hole that is big enough. Generally faster.
+* Best fit – Allocate the smallest hole that is beg enough.
+* Worst fit – Allocate the largest hole. Bad.
+
+#### Fragmentation
+The first-fit and best-fit strategies suffer from external fragmentation – when the total memory space is enough to satisfy a request, but the space is non-contiguous. The 50% rule is a statistical observation that if $N$ blocks are allocated, $\fracN2$ will be unusable.
+
+One solution to this is *compaction* – shuffle the memory contents to place all free memory together. This may not always be possible, unless addresses are dynamically relocated. Even if it is possible, it may be costly.
+
+Segmentation and paging are two other solutions to this; they both allow the logical address space of the process to map to a noncontiguous physical space.
+
+Internal fragmentation is another problem – since memory is allocated in fixed blocks, a process may get more than it requested.
+
+### 8.4 Segmentation
+Segmentation provides a way for the hardware to map the programmer's view to the physical view.
+
+#### Basic Method
+To the programmer, the memory consists of memory segments like "the stack", "the math library", and so on. Segmentation supports this view.
+
+The logical address space consists of segments, each of which has a name and a length. The addresses specify both the segment name (for simplicity, usually a number) and the offset within the segment. A typical C compiler would have separate segments for the code, global variables, the heap, the stacks, and the standard C library.
+
+#### Segmentation Hardware
+The mapping from the segment view to the physical space is carried out by a *segment table*, a list of records with a *segment base* and *segment limit* each.
+
+### 8.5 Paging
+Paging is another memory-management scheme that provides the same advantage as segmentation, but unlike it avoids external fragmentation and the need for compaction. It also solves the problem of fitting memory chunks on the backing store, which cannot be compacted.
+
+#### Basic Method
+Physical memory is broken into blocks called *frames*, while logical memory is broken into blocks of the same size called *pages*. The backing store is broken into chunks that are the size of a cluster of frames.
+
+When a process is to be executed, its pages are loaded into any available memory frames from their source.  
+Every address contains a page number $p$ and a page offset $d$. $p$ indexes into a page table to get the base address of the corresponding page, which is combined with $d$ to find the physical address.
+
+Note that paging does not avoid internal fragmentation. We can guess that it averages to half a frame per process, which suggests that frame size should be small, but the overhead of page table entries is reduced for larger pages.
+
+The *frame table* stores which frames are allocated and available and other such information.
+
+#### Hardware Support
+Older OSs used dedicated registers to hold the page table, but modern systems use page tables of millions of entries. They keep the table in main memory, with a page-table base register pointing to it.  
+However, this means that two memory accesses are needed for a single retrieval. This is avoided by using a *translation look-aside buffer*, which is a high-speed associative memory. It stores a few page-table entries, and when a TLB miss occurs, the retrieved entry is added to it. Some entries are *wired down* in the TLB, like those for kernel code.
+
+Some TLBs store *address-space identifiers* as well, which are names for processes that provide address-space protection for them. TLBs that do not use ASIDs need to be flushed with every context switch.
+
+The effective access time, as in the case of caches, is determined by weighing different possible access times with the hit ratio.
+
+#### Protection
+Each frame has protection bits associated with it, usually kept in the page table.
+
+#### Shared Pages
+If the code for an application that many users are using is *reentrant*, or *pure* (non-self-modifying), it can be shared among them instead of having separate copies of it.
+
+### 8.6 Structure of the Page Table
+#### Hierarchical Paging
+The page table is usually too large for the address spaces of modern computers. This is fixed by using a two-level paging algorithm – the page table itself is paged.
+
+However, the multiple memory accesses inherent in this method make it prohibitive.
+
+#### Hashed Page Tables
+A hashed page table is a map from virtual page numbers to a linked list of elements with a common hash value.
+
+A variation of this scheme uses *clustered page tables*, which stores several pages in a single entry of a hash table (???).
+
+#### Inverted Page Tables
+Usually, page tables map from virtual addresses to physical addresses. This, however, itself takes up a lot of physical space. We solve this problem with an *inverted page table*, which has an entry for each physical frame storing its virtual address and information about the process that owns it.
+
+While this reduces the amount of space required, it increases lookup time. It also makes the implementation of shared memory more difficult.
+
+#### Oracle SPARC Solaris
+
+### 8.7 Example: Intel 32- and 64-Bit Architectures
+
+### 8.8 Example: ARM Architecture
+
+### 8.9 Summary
+
+## Chapter 9: Virtual Memory
+Virtual memory allows systems to execute processes without loading them completely into memory. This has the advantage of both abstracting main memory, and of allowing programs to be larger than virtual memory.
+
+### 9.1 Background
+
+### 9.2 Demand Paging
+
+### 9.3 Copy-on-Write
+
+### 9.4 Page Replacement
+
+### 9.5 Allocation of Frames
+
+### 9.6 Thrashing
+
+### 9.7 Memory-Mapped Files
+
+### 9.8 Allocating Kernel Memory
+
+### 9.9 Other Considerations
+
+### 9.10 Operating-System Examples
+
+### 9.11 Summary
