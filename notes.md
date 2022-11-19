@@ -1270,23 +1270,390 @@ While this reduces the amount of space required, it increases lookup time. It al
 Virtual memory allows systems to execute processes without loading them completely into memory. This has the advantage of both abstracting main memory, and of allowing programs to be larger than virtual memory.
 
 ### 9.1 Background
+Memory-management algorithms are required because the instructions being executed need to be in physical memory. While dynamic loading can help to ease this, it requires extra overhead on the part of the programmer.
+
+This, however, limits the size of the program to the size of physical memory. This is a big restriction – the ability to execute a memory that is not completely in memory has a lot of benefits:
+
+* The users could program for an larger virtual address space rather than a smaller physical one.
+* Many programs could be run simultaneously.
+* Less I/O would be needed to load or swap user programs.
+
+Virtual memory is the basis for this – it separates logical memory from physical memory, providing programmers with a large virtual memory. The virtual address space of a process is the view of the memory space as seen by that process.
+
+The virtual address space is organised into sections for the code, the data, the heap and the stack. The heap and stack grow towards each other (upwards and downwards respectively), and the space between them is mapped to physical space only as needed. This gap is called a *hole* – address spaces with holes are called *sparse*. Sparsity allows for dynamic linking of libraries and other objects.
+
+Virtual memory also allows or files and memory to be shared between processes, with the following benefits:
+
+* System libraries can be shared by several processes.
+* Regions of memory can be shared between processes.
+* Pages can be shared during process creation by `fork()`ing, which speeds up process creation.
 
 ### 9.2 Demand Paging
+Consider the circumstances in which an executable is loaded into memory. The entire program may be loaded at execution time, but this may not be required; alternatively, we may load pages only as they are needed. This is called *demand paging*.
+
+A demand-paging system is similar to a paging system with swapping, although calling a system that moves pages into a system cannot be called a swapper – it only manipulates pages, not processes. The pager in such systems is *lazy* – it does not move a page into memory unless it will be needed.
+
+#### Basic Concepts
+When a process is swapped in, the pager only brings in those pages which it guesses will be used before the process is swapped out.  
+
+We need to distinguish between (logical) pages that are in memory and those that are on disk – we use a single-bit field in the page table to indicate whether a page is valid and in memory or not.  
+Now, if a program tries to access a page not in memory, it causes a *page fault*, which triggers a check for whether or not the reference was valid. If it was, we bring the required page in by finding a free frame and allocating it, and modifying the relevant entries in the process and page tables. Then the instruction that was interrupted is rerun.  
+If the system starts with no pages in memory, it follows a *pure demand paging* scheme – only the necessary pages are brought into memory.
+
+In theory, it is possible for programs to access several new pages in a single instruction, which would have unacceptable impacts on performance; however, in practice, programs tend to have *locality of reference*, which results in reasonable performance.
+
+There is similar hardware support for demand paging as for paging and swapping – a page table (with a valid-invalid bit or protection bits) and a secondary memory (or *swap space*).
+
+Restarting interrupted instructions poses some problems, however – consider the case where an instruction may modify several different locations. One way to avoid this is to try to access both ends of both blocks before starting the instruction.
+
+#### Performance of Demand Paging
+Consider the *effective access time* in a demand-paged system. If $p$ is the probability of a page fault, then this is equal to $(1-p) \times \text{(memory access time)} + p \times \text{(page fault time)}$.
+
+The page fault time has three major components – servicing the interrupt, reading in the page, and restarting the process. Of these, the first and third can be reduced to an overhead of the order of 1-100 microseconds each; the page-swich time is the RDS, taking about 8 milliseconds. Given a memory access time of 200 nanoseconds, this gives us an effective access time of approximately $200 + 7,999,800p$.  
+For a performance degrade of less than 10%, then, we need $p < 2.5 \cdot 10^{-6}$. Thus, less than one memory access out of nearly 400,000 should result in a page-fault.
+
+The handling of swap space is another consideration in demand-paged systems.  
+Since swap space I/O is faster than filesystem I/O, a system can achieve better throughput by copying a file image into the swap space at process startup and then exclusively paging between memory and the swap space.  
+Alternatively, it may initially page in from disk but replace the page in the swap space after paging out.  
+Some systems carry out demand paging of binary files, which are non-modifiable and so can be overwritten instead of being paged out. Swap space is still, however, used for *anonymous memory* (pages not associated with a file), like the stack and heap.
 
 ### 9.3 Copy-on-Write
+Process creation using the `fork()` syscall may bypass the need for demand paging by using a technique similar to page sharing – this optimised process creation and minimises page allocation to the new process.
+
+Since children processes frequently call `exec()` immediately after creation, duplicating the parent's address space is unnecessary in these cases. A technique called *copy-on-write* allows the parent and child to initially share the same pages (marked as copy-on-write pages), which are duplicated only if either process modifies them. Pages that cannot be modified, however, remain shared by the processes.
+
+Many OSs maintain a pool of free pages for such allocations. This is done by a scheme called *zero-fill-on-demand* – pages are zeroed out before allocating.
 
 ### 9.4 Page Replacement
+We can increase our degree of multiprogramming by *over-allocating* memory. This, however, may lead to a situation where page is to be allocated but there are no free frames – this can be solved by either reducing the degree of multiprogramming (by swapping out a process) or page replacement.
+
+#### Basic Page Replacement
+If no frame is free, we can free one that is not being currently used and use it. However, note that this requires two operations – a page out and a page in – which leads to an overhead. We can reduce this overhead by using a *modify bit* or *dirty bit*, which indicates whether a page has been modified or not.
+
+Thus, we now require a frame-allocation algorithm and a page-replacement algorithm. Page-replacement algorithms are evaluated by simulating their performance on a string of memory references.
+
+#### FIFO Page Replacement
+A FIFO replacement algorithm records the time when a page is brought into memory (or maintains a queue of all pages in memory) and replaces the most recently paged in one.
+
+This algorithm illustrates *Belady's anomaly* in some cases – the number of page faults increases with the number of allocated frames.
+
+#### Optimal Page Replacement
+The optimal page replacement algorithm simply consists of replacing the page that will not be used for the longest period of time – this guarantees the lowest possible page-fault rate.
+
+#### LRU Page Replacement
+This algorithm is effectively the opposite of the FIFO algorithm – the *least recently used* page is replaced. This can be implemented by recording the time of paging in (by copying the contents of a clock) or with a stack; however, both of these add a lot to the memory overhead.
+
+This algorithm, and optimal replacement, do not suffer from Belady's anomaly – they belong to a class called *stack algorithms*, for which it can be shown that the set of pages in memory for $n$ frames is a subset of those that would be in memory with $n+1$ frames.
+
+#### LRU-Approximation Page Replacement
+Some systems provide a *reference bit* for each page, which is set when the page is referenced.
+
+##### Additional-Reference-Bits Algorithm
+We can store additional bits – say eight – for each page, and record the values at regular intervals. The page with the lowest value stored in these is then the LRU page.
+
+##### Second-Chance Algorithm
+The second-chance algorithm replaces the most recently used page *with a cleared reference bit*. If the MRU page has a set reference bit, it is cleared before checking the next one.  
+This can be implemented by a circular queue, with a pointer that clears bits as it advances..
+
+##### Enhanced Second-Chance Algorithm
+We can consider the reference and modify bits as an ordered pair, which gives us the following possibilities:
+
+* $(0,0)$ – neither used nor modified; best page to replace
+* $(0,1)$ – not used but modified; will have to be paged out
+* $(1,0)$ – recently used but clean; will probably be used again
+* $(0,0)$ – both
+
+#### Counting-Based Page Replacement
+This is a class of algorithms that maintains a count of references for each page. For example, we may have least frequently used (LFU) or most frequently used (MFU) page replacement; however, neither of these is common and they are not close to optimal.
+
+#### Page-Buffering Algorithms
+These algorithms are augmentations of page-replacement algorithms – for example, we may read a page into a free frame before writing out a victim page, which allows the process to start again as soon as possible.
+
+We may also maintain a list of modified pages, which can be rewritten to disk when the paging device is idle (thus making them clean again).
+
+We could also record which page was in each frame, and continue to access it even after it has been paged out (if that frame was not reused).
+
+#### Applications and Page Replacement
 
 ### 9.5 Allocation of Frames
+We need to decide how to allocate free frames among processes.
+
+#### Minimum Number of Frames
+We must allocate a minimum number of frames to all processes, for reasons of performance. This number is defined by the computer architecture.
+
+#### Allocation Algorithms
+One simple way is to allocate an equal share of frames to each process; this is called *equal allocation*.
+
+However, processes require different amounts of memory; we solve this with *proportional allocation*, where the number of pages is decided according to the size of the process.
+
+Note that neither of these algorithms take priority into account.
+
+#### Global versus Local Allocation
+Page-replacement algorithms are classified into two categories – those that allow a replacement frame to be selected from the set of all frames (*global replacement*), and those that require it to be from the replacing process's set (*local replacement*).
+
+Global replacement has the disadvantage that it makes throughput and runtime non-deterministic, but local replacement algorithms hinder a process by preventing it from accessing less used pages.
+
+#### Non-Uniform Memory Access
+Many systems have memory that has lower access time in certain regions than in others – these are called *non-uniform memory access* (NUMA) systems. These systems are especially susceptible to changes in the location of page frames – page frames should be stored in locations "closer" to the CPU for higher throughput.
 
 ### 9.6 Thrashing
+When a process does not have enough frames, it ends up faulting repeatedly, and replacing and bringing back pages with high frequency. This is called *thrashing*.
+
+#### Cause of Thrashing
+Thrashing causes CPU utilisation to decrease, which results in increased multiprogramming, which then causes even more page faults and increased thrashing.
+
+This effect can be limited by using local replacement or priority replacement, but these do not entirely solve the problem. We need to know how many frames a process needs – one approach to this question is defined by the *locality model*, which posits that a process moves from locality to locality as it executes. Localities are defined by the program's structure and the data structures it uses.
+
+#### Working-Set Model
+The working-set model is based on the locality principle – a parameter $\Delta$, the *working-set window*, defines the *working set*, which is the most recent $\Delta$ page references. The working set is updated every timestep.
+
+The most important property of the working set is its size. Let $D$ be the total demand for frames; then
+$$D = \sum_\text{processes} \text{working-set size}.$$
+If $D > m$, the total number of available frames, thrashing will occur.
+
+The OS, then, allocates frames to each process according to the working-set size, and initiates or suspends processes according to the demand.
+
+The working-set model is approximated by a fixed-interval timer interrupt and a reference bit.
+
+#### Page-Fault Frequency
+Some strategies make use of page-fault frequency (PFF) – they allocate frames if it is high, and remove frames if it is low.
+
+#### Concluding Remarks
 
 ### 9.7 Memory-Mapped Files
+*Memory mapping* a file consists of using virtual memory techniqes to treat file I/O as routine memory accesses. This allows a part of the virtual address space to be logically associated with the file.
+
+#### Basic Mechanism
+Disk blocks are mapped to pages in memory, which are then handled by ordinary demand paging. This then reduces file manipulation to simple memory access, which is much faster.  
+Note that writes to memory-mapped files are not necessarily synchronised to disk updates.
+
+Multiple processes may map the same file concurrently, and all updates are seen by all processes sharing the file.
+
+#### Shared Memory in the Windows API
+
+#### Memory-Mapped I/O
+We have seen that I/O controllers include registers to hold commands and data, which special I/O instructions access. Many architectures provide *memory mapped I/O* – ranges of memory addresses are mapped to device registers, which can be read and written to.
+
+Memory mapped I/O is appropriate for devices with fast response times, like video controllers, but also for the serial and parallel ports that connect devices to a computer. The CPU transfers a byte to the port, sets a control bit, and waits; when the control bit is cleared, the process is repeated. The control bit may be polled (*programmed I/O*) or it may interrupt the system on being cleared (*interrupt-driven I/O*).
 
 ### 9.8 Allocating Kernel Memory
+When a user process requests memory, pages are allocated from a list of pages maintained by the kernel, which is populated by page replacement algorithms, and contains free pages from throughout memory.
+
+Kernel memory, however, is allocated from a different pool. This is because kernel memory usage is especially prone to fragmentation, and because it sometimes requires contiguous pages.
+
+We consider two strategies for managing free memory for kernel processes.
+
+#### Buddy System
+Under this system, memory is allocated from a fixed-size segment consisting of contiguous pages. The allocator satisfies requests in units sized as powers of two, with rounding up. At allocation time, each memory segment is divided into two buddies until the appropriate size is found. Adjacent buddies can be quickly combined into larger segments using *coalescing*.
+
+However, this system can lead to high fragmentation.
+
+#### Slab Allocation
+A *slab* consists of one or more continguous pages, and a *cache* consists of one or more slabs. Each kernel data structure has a single cache, populated with objects of that data structure's type.
+
+The slab allocator first attempts to satisfy a request with a free object in a partial slab (which contains some free objects); if none exists, a free object is assigned from an empty slab; if none exists, a new slab is allocated.
+
+The slab allocator has two main benefits:
+
+* Fragmentation does not cause any wastage.
+* Memory requests can be satisfied quickly.
 
 ### 9.9 Other Considerations
+Aside from the selection of a replacement algorithm and an allocation policy, there are a number of considerations in a paging system.
+
+#### Prepaging
+Prepaging involves trying to reduce the high level of initial paging that processes have – the strategy is to bring into memory at one time all the pages that will be needed.
+
+#### Page Size
+Page sizes range from $2^{12}$ to $2^{22}$ bytes. A smaller page size increases the size of the page table, but utilises memory better and has a smaller transfer time.  
+Smaller page size also improves *resolution*, which makes for better locality.
+
+#### TLB Reach
+The TLB reach refers to the amount of memory accessible from the TLB. It should be big enough for the working set of a process.  
+It can be increased by increasing the page size, or, alternatively, by providing multiple page sizes.
+
+#### Inverted Page Tables
+Inverted page tables reduce the amount of memory required to store the mapping from physical to virtual memory, but no longer contains complete information.
+
+#### Program Structure
+Careful selection of data structures and programming structures can increase locality. The compiler and loader can also have a significant effect on paging; for example, the loader can place routines completely within single pages.
+
+#### I/O Interlock and Page Locking
+Some pages sometimes need to be *locked* in memory, *e.g.*, when I/O is done to or from virtual memory (to prevent the I/O-accessed location from being paged out while the process is waiting).
+
+There are two solutions to this – never execute I/O in user memory (only to system memory), or to allow pages to be locked into memory. The latter involves associating a lock bit to each frame, which determines whether or not it can be selected for replacement.
+
+Lock bits are used in various situations:
+
+* The kernel code may be locked into memory.
+* A database process may pin page into memory.
+* We may want to avoid the replacement of a page that was newly brought in (but whose process has been swapped out).
 
 ### 9.10 Operating-System Examples
 
 ### 9.11 Summary
+
+# Part Four
+## Chapter 10: Mass-Storage Structure
+The file system consists mainly of three parts – secondary storage, a user interface, and the algorithms and data structures used to implement this interface.
+
+### 10.1 Overview of Mass-Storage Structure
+#### Magnetic Disks
+The bulk of secondary storage for modern systems is formed by magnetic disks. They are composed of platters, each of which has a flat circular shape and is covered with a magnetic material on both surfaces.  
+A read-write head moves above each surface, attached to an arm (common to all heads). The surface is divided into tracks, subdivided into sectors. The set of all tracks at one (radial) position makes up a cylinder.
+
+The *positioning time* for moving a head to the desired locatino consists of the *seek time* plus the *rotational latency*.
+
+A disk drive is attached to a computer by an I/O bus, and the data transfers are carried out by *controllers* (a *host controller* on the computer end and a *disk controller* on the disk end). Disk controllers usually have a built-in cache.
+
+#### Solid-State Disks
+An SSD is a nonvolatile memory that is used like a hard drive. They are more reliable than traditional ones, as they have no moving parts and have no latency. However, they are more expensive, have less capacity, and have shorter life spans.
+
+Their speed means that the standard bus interface becomes the RDS in throughput.
+
+#### Magnetic Tapes
+Magnetic tapes are relatively permanent and have high capacity, but have slow access times. They are mainly used for backup.  
+The tape is kept on a spool and wound or unwound past a read-write head. This increases positioning time, but actual data transfer happens at comparable speeds.
+
+### 10.2 Disk Structure
+Modern disk drives are addressed as large one-dimensional arrays of logical blocks (which are the smallest unit of transfer), usually about 512 bytes. These blocks are mapped to sectors of disk sequentially, from the outermost to the innermost tracks.
+
+The translation from an array index to an old-style disk address is difficult for two reasons – first, some sectors may be defective, and another is that the density of data may not be uniform (in *constant angular velocity* (CAV) systems).
+
+### 10.3 Disk Attachment
+Computers can access disk storage via *host-attached storage* (I/O ports) or *network-attached storage* (a remote host in a distributed file system).
+
+#### Host-Attached Storage
+Local I/O ports use several technologies. Typical desktop PCs use an architecture called IDE or ATA (at most two drives per I/O bus), while high-end workstations use more sophisticated I/O architectures like fibre channel.
+
+Storage devices suitable for this approach are hard disk drives, RAID arrays, and CD, DVD and tape drives.
+
+#### Network-Attached Storage
+A NAS device is a special-purpose storage system that is accessed remotely over a data network. They are accessed via a RPC interface.
+
+#### Storage-Area Network
+Storage I/O operations consume bandwidth on a data network – this is a disadavantage of NAS systems. A SAN is a private network dedicated to connecting servers and storage units.
+
+### 10.4 Disk Scheduling
+The efficient use of disk drives depends on reducing the access time (the seek time and the rotational latency) and increasing disk bandwidth. These can both be achieved by managing the order in which disk I/O requests are serviced.
+
+Pending I/O requests are placed on a queue, and the system needs to choose which request to service when the device is free. Disk-scheduling algorithms are used to make this choice.
+
+#### FCFS Scheduling
+This algorithm is fair, but does not provide the fastest service. It may involve a lot of swinging between locations on the disk, which increases average access time.
+
+#### SSTF Scheduling
+The *shortest-seek-time-first algorithm* is based on the assumption that the requests closest to the current head position should be serviced first. This method, like SJF scheduling, can cause starvation of some requests.
+
+#### SCAN Scheduling
+The disk arm in this algorithm starts at one end and moves towards the other, servicing requests as it proceeds. It reverses direction at the end of a pass.
+
+#### C-SCAN Scheduling
+*Circular SCAN* is a variant of SCAN designed to provide a more uniform wait time; the head returns to the beginning of the disk without servicing any requests on the way back.
+
+#### LOOK Scheduling
+This is a modification of SCAN scheduling where the head only goes until the last request in either direction.
+
+#### Selection of a Disk-Scheduling Algorithm
+SSTF is common since it increases performance over FCFS; SCAN and C-SCAN perform better if there is a heavy load on the disk.  
+
+The file allocation method has a great impact on the requests for disk service – contiguously allocated files generate requests with high locality, while linked or indexed files will require greater head movement.  
+Similarly, where the directories and index blocks are stored makes a considerable difference.
+
+Modern disks, however, have a high rotational latency as well as high seek time, and do not disclose the location of the physical blocks; this means that scheduling must be performed by the controller hardware of the disk drive. The additional responsibility that the OS has of managing operations like paging, though, makes this a hard choice.
+
+### 10.5 Disk Management
+#### Disk Formatting
+The division of a magnetic disk into sectors is called *physical* or *low-level* formatting; this fills the disk with a special data structure for each sector, which consists of a header, a trailer (which have information for the controller, like the sector number and an ECC) and a data area.
+
+The OS then partitions a disk into cylinders, and creates a file system (*logical formatting*; initial file-system data structures are stored on disk).  
+For efficiency, blocks are grouped into larger chunks, called *clusters*, which are used for file I/O. This ensures that file I/O has more sequential-access characteristics and less random-access characteristics.
+
+#### Boot Block
+The initial bootstrap program, which finds the kernel on disk, loads it, and jumps to the initial address, is stored in ROM. It cannot, however, be changed without changing the ROM hardware, so many systems have a bootstrap loader program in the boot ROM, which is easier to change. The bootstrap program itself is stored in the *boot blocks* on disk.
+
+#### Bad Blocks
+One or more sectors in the disk may be defective or damaged. This can be handled by flagging bad blocks during formatting, or maintaining a list of bad blocks that gets updated during operation. Sectors may also be kept in spare to sub in for bad blocks.
+
+### 10.6 Swap-Space Management
+Swap-space management is another low-level task of the OS.
+
+#### Swap-Space Use
+Different OSs use swap space differently; for example, it may hold an entire process image (with code and data) or pages pushed out of main memory.
+
+#### Swap-Space Location
+Swap space can be taken from the normal filesystem, or have its own disk partition. If it is a large file within the file system, it can be manipulated by normal file-system routines, although this is inefficient.
+
+A *raw partition* can be used for swap space, which is handled by a separate swap-space storage manager. This uses algorithms optimised for speed rather than storage efficiency – thus it may, for instance, cause some degree of internal fragmentation. This creates a fixed amount of swap space, however.
+
+#### Swap-Space Management: An Example
+
+### 10.7 RAID Structure
+Computer systems can have many disks attached, which allows for improvements in the rate of data transfer and the reliability of storage. A variety of techniques, called *redundant arrays of independent disks*, is used to address these issues.
+
+#### Improvement of Reliability via Redundancy
+When we have more disks, there is a higher chance that one of them fails. We fix this problem by storing redundant information in the disks.
+
+The simplest way to do this is to duplicate every disk (*mirroring*). However, power failures can damage both volumes simultaneously; therefore, some systems add a solid-state NVRAM cache to the array, which is protected from power failures.
+
+#### Improvement in Performance via Parallelism
+Multiple disks can improve the transfer rate by *data striping*. In its simplest form, the bits of each byte are split across multiple disks. This is *bit-level striping*; we may also implement *block-level* or *byte-level* striping.
+
+This form of parallelism has two main goals – increase the throughput of batches of small accesses, and reduce the response time of large accesses.
+
+#### RAID Levels
+There are a number of schemes to provide redundancy at lower cost – these are classified according to RAID levels.
+
+* **Level 0 (block-level striping).**
+* **Level 1 (disk mirroring).**
+* **Level 2 (memory-style error-correcting-code).** Parity bits stored in extra disks.
+* **Level 3 (bit-interleaved parity).** More efficient usage of parity bits over level 2. Less overhead and more parallelism than level 1. Fewer I/Os per second and higher parity computation overhead.
+* **Level 4 (block-interleaved parity).** Slow data transfer but parallelism.
+* **Level 5 (block-interleaved distributed parity).** Spreads data and parity among all disks; for each block, one disk stores parity and rest store data.
+* **Level 6 (P + Q redundancy).** Reed-Solomon code instead of parity.
+* **Level 0+1/1+0.** Performance + reliability. Expensive.
+
+*Snapshots* and *replication* may also be implemented alongside RAID, for higher reliability. *Hot spares* may also be used.
+
+#### Selecting a RAID Level
+Rebuild performance is a common metric in evaluating RAID levels. It is easiest for level 1, and may take hours for level 5.
+
+Level 0 is used in applications where loss is not critical.  
+Level 1 is used in applications that require high reliability with fast recovery.  
+Level 0+1 and 1+0 are used where performance and reliability are both important. However, level 5 is preferred for large volumes of data.
+
+#### Extensions
+RAID concepts have been generalised to other storage devices and to other areas like data broadcast (data is split, augmented with ECCs, and then transmitted).
+
+#### Problems with RAID
+RAID does not protect against hardware and software errors. File corruptions, for example, are handled by checksums in some file systems.
+
+RAID implementations also tend to be inflexible, in matters of space availability. Even if enough hardware is available, the volume manager may not allow for changes in volume size.
+
+### 10.8 Stable-Storage Implementation
+For implementing stable storage, we need to write data to multiple storage devices with independent failure modes. We also need to ensure that the disks are never inconsistent at any point, and that failures do not affect even recovery.
+
+A disk write may be successful, a partial failure, or a total failure.  
+In order to carry out recovery, the system must maintain two physical blocks per logical block – both are written to sequentially, and the write is declared complete only after both operations are successful.  
+During recovery, each pair of blocks is examined. If both are the same, no further action is necessary; if one contains a detectable error, it is replaced with the contents of the other; if they differ in content but have no error, replace the first block with the second.
+
+Many storage arrays add an NVRAM cache because synchronous I/O is slow.
+
+### 10.9 Summary
+
+## Chapter 11: File-System Interface
+The file system consists of a collection of files and a directory structure that provides information about the files.
+
+### 11.1 File Concept
+
+### 11.2 Access Methods
+
+### 11.3 Directory and Disk Structure
+
+### 11.4 File-System Mounting
+
+### 11.5 File Sharing
+
+### 11.6 Protection
+
+### 11.7 Summary
