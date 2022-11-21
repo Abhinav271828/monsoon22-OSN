@@ -1645,15 +1645,290 @@ Many storage arrays add an NVRAM cache because synchronous I/O is slow.
 The file system consists of a collection of files and a directory structure that provides information about the files.
 
 ### 11.1 File Concept
+The file is a logical storage unit; it is an abstraction of the OS away from the physical properties of the storage devices. Files are named collections of related information recorded on secondary storage.
+
+#### File Attributes
+A file's attributes typically consist of its name, identifier, type, location, size, protection, and time, date and user identification. This information is stored in the directory structure, kept in secondary storage.
+
+#### File Operations
+The operating system can perform a variety of operations on files, like creating, writing, reading, repositioning, deleting, and truncating. These primitive operations are combined to carry out other operations like copying or appending to a file.
+
+Files being actively used are recorded in the *open-file table*, in order to avoid searching the directory structure repeatedly; the `open()` syscall returns a pointer to the entry in the open-file table.  
+OSs typically maintain tables both per-process and system-wide. The table maintains the file pointer, file-open count, the disk location of the file, and the access rights.
+
+Some systems allow for open files to be locked, either with a *shared lock* or an *exclusive lock*.
+
+#### File Types
+One common way to implement file types is the include the type in the name through an *extension*.
+
+#### File Structure
+File types sometimes indicate the internal structure of the file, to match the expectations of the programs that read them. The more file structures we support, however, the bigger the OS code gets.
+
+#### Internal File Structure
+The fact that disk I/O is performed in units of blocks causes a problem. Many systems pack a number of logical records into a single physical block to solve this.  
+Fragmentation is another common problem of file-systems.
 
 ### 11.2 Access Methods
+#### Sequential Access
+This is the simplest method of accessing data from files – information in the file is processed in order. Read and write operations manipulate the data and advance the file pointer.
+
+#### Direct Access
+This method relies on a file being made up of fixed-length logical records (the disk model of a file). Any block can be read at any point.
+
+#### Other Access Methods
+Most access methods built on top of direct access generally involve the construction of an index for the file – this contains pointers to the various blocks of the file, and can be searched. The index file can be hierarchical for memory reasons.
 
 ### 11.3 Directory and Disk Structure
+A file system can be stored in a disk or a partition of a disk; any entity that contains a file system is called a *volume*. A volume also contains information about the files in a *device directory*.
+
+#### Storage Structure
+A file system may be general-purpose, like `ufs` and `zfs`, or special-purpose, like `tmpfs`, `objfs`, `ctfs`, `lofs` and `procfs`.
+
+#### Directory Overview
+The directory can be considered a symbol table which maps file names to their directory entries. We can organise this logical system with a number of data structures, keeping in mind that it needs to support searching for, creating, and deleting files, listing directories and traversing the file system.
+
+#### Single-Level Directory
+This is the simplest directory structure – all files are contained in the same directory. However, this requires all files to have unique names.
+
+#### Two-Level Directory
+This system provides each user with their own *user file directory* (UFD), which are stored in the system's *master file directory* (MFD).
+
+This system isolates users from each other.
+
+#### Tree-Structured Directories
+A natural generalisation of the two-level directory structure is to extend it to trees of arbitrary height. This is the most common directory structure. Each process has a *current directory*.
+
+Files are specified by their path names, which may be absolute or relative. Users can define their own subdirectories to organise their files.
+
+#### Acyclic-Graph Directories
+Some subdirectories might need to be shared among users, which a tree structure doesn't allow for. Acyclic graph-structured directories can permit this.
+
+Shared files and subdirectories can be implemented by *links* – a link is a pointer to another file or subdirectory, *e.g.*, a path name. They may also be duplicated in both locations.
+
+Issues to consider include non-unique file names and deletion (which can be handled by maintaining a count of open links for each file).
+
+#### General Graph Directory
+If cycles are allowed in a graph directory, we need to make sure that we don't search any component twice during traversal. The presence of cycles also complicates finding the references to a file – this requires a garbage collection module.
 
 ### 11.4 File-System Mounting
+A file system must be mounted before it is visible to processes on the system. The OS takes the mount point and the name of the device (and sometimes the type of file system) and attaches the file system in that directory.  
+It also verifies that the device has a valid file system.
+
+The details of the process vary. For example, some systems may not allow mounting over a nonempty directory, and some may allow mounting the same device at different locations.
 
 ### 11.5 File Sharing
+#### Multiple Users
+If the directory structure allows for users to share files, the system must mediate the file sharing.  
+
+To implement sharing and protection, files need to have more attributes, like *owner* (the user who can change attributes and grant access) and *group* (the subset of users who can share access to a file).
+
+#### Remote File Systems
+There are various methods of implementing file-sharing methods, like manual file transfer, distributed file systems (remote directories visible from a local machine), and the World Wide Web.
+
+##### The Client-Server Model
+When a remote machine containing a file system is mounted on a system, the former is called the *server* and the latter the *client*. The server specifies the available files and identifies clients for security.
+
+Once the remote file system is mounted, a file-open request is sent along with the requesting user's ID; the server then determines if the user has the credentials. If they do, a file handle is returned for the user to manipulate the file.
+
+##### Distributed Information Systems
+*Distributed information* (or *naming*) *services* provide unified access to the information needed for remote operation.  
+One example is the *domain name system*, which provides name-to-address translations for the internet.  
+Other systems provide username/password/user ID/group ID space for a distributed facility.
+
+##### Failure Modes
+Local file systems can fail because of disk failure, directory structure corrpution, cable failure, etc. Remote file systems are even more vulnerable, since network interruptions may be caused by many factors. The RFS protocol determins the failure semantics – for example, whether the interrupted operations should be terminated or suspended.
+
+To implement recovery, the client and server may maintain some state information.
+
+#### Consistency Semantics
+Consistency semantics specify how multiple users are to access a shared file simultaneously – specifically, when modifications of data by one user will be visible to others.  
+While they are related to process synchronisation algorithms, these tend not to be used due to the high latencies involved in the case of disks and networks.
+
+##### UNIX Semantics
+
+##### Session Semantics
+
+##### Immutable-Shared-Files Semantics
 
 ### 11.6 Protection
+Data stored in a computer system needs to be kept safe from physical damage and improper access. The latter issue, *protection*, is addressed in many ways.
+
+#### Types of Access
+Protection mechanisms provide controlled access, by limiting the *type* of file access. These types correspond to the types of operations that can be carried out on a file – reading, writing, executing, appending, deleting, and listing information.
+
+#### Access Control
+The most common approach is to make access dependent on user ID. Each file and directory has an associated *access-control list*, specifying access types allowed for each user. This allows complex access methodologies, but has the problem of length and variable directory size.
+
+A condensed version of the ACL may also be used, which lists access types for three types of users – the owner, the group, and all others.
+
+#### Other Protection Approaches
+Another approach is to associate a password with each file.  
+In a multilevel file system, we also need to provide a mechanism for directory protection. This includes the ability to create and delete files in a directory, determine the existence of a file in a directory, and so on.
 
 ### 11.7 Summary
+
+## Chapter 12: File-System Implementation
+### 12.1 File-System Structure
+Disks are used for file-system storage since they can be modified in place, and can directly access any block of information. However, algorithms and data structures are needed to map logical file systems to physical devices.
+
+There are many levels between the logical file system and the physical devices:
+
+* The I/O level consists of device drivers and interrupt handlers that transfer information between the memory and the disk.
+* The basic file system needs to issue commands to the driver to manipulate physical blocks on disk. It also manages the buffers and caches.
+* The file organisation module translates logical block addresses to physical block addresses, and also includes the free-space manager.
+
+### 12.2 File-System Implementation
+#### Overview
+On disk, the file system contains a number of structures information important to the computer:
+
+* The *boot control block* contains information needed to boot the OS from that volume.
+* The *volume control block* contains volume/partition details, like the number and size of blocks, the free-block count, and free-block pointers.
+* A directory structure has the file names and FCB/inode numbers.
+* An FCB (per file) has the file ID number and many other details.
+
+There is some data in memory as well (loaded at mount time), like the *mount table*, the directory-structure cache, the system-wide open-file table, the per-process open-file table, and buffers.
+
+When a new file is created, the logical file system allocates a new FCB and updates the corresponding directory on disk.  
+The `open()` syscall adds a file to the calling process's file table if it is already open, and searches the directory structure to open it otherwise.  
+When the file is closed, the per-process table entry is removed and the system-wide open table count is decremented. If it was closed for the last time, the FCB metadata is updated on disk.
+
+#### Partitions and Mounting
+A disk can have multiple partitions, and a volume can span multiple partitions across multiple disks (a form of RAID).
+
+A partition with a file system is called *cooked* (as opposed to *raw*). Boot information can be stored in a separate partition; it has its own format. The boot loader loads this code and runs it.
+
+The root partition contains the kernel and some other system files, is mounted at boot time.
+
+#### Virtual File Systems
+There are a number of implementation details involved in using multiple file systems concurrently.
+
+Data structures and procedures separate syscall functionality from implementation details. They form the *virtual file system*, which is a layer of abstraction between all the file systems in a computer and the syscall interface.  
+The VFS distinguishes local files from remote files, and identifies the types of local file systems. It activates operations specific to the type of file systems for local requests, and NFS protocal procedures for remote ones.
+
+### 12.3 Directory Implementation
+The performance and reliability of a system are significantly affected by the selection of directory-allocation and directory-management algorithms.
+
+#### Linear List
+We could maintain a linear list of file names with pointers to the data blocks. This is a time-consuming method, but simple to implement.
+
+The fact that this approach requires a linear search is its main demerit. Directory information is freqently needed, and it cannot be slow to access.
+
+#### Hash Table
+Here, a linear list stores the directory entries, but a hash data structure is also used – it takes a value computed from the file name and returns a pointer to the entry in the list. Insertion and deletion are also straightforward, provided collisions are handled.
+
+The major issue with hash tables is their dependence on their fixed size. If a hash table is to be enlarged, existing entries must be reorganised.  
+An alternative is to use a chained-overflow hash table, where each hash entry is a linked list.
+
+### 12.4 Allocation Methods
+We need to have an algorithm to allocate space to files on disk, in a way that effectively uses disk space. There are three major methods to do this – continguous, linked and indexed.
+
+#### Contiguous Allocation
+Here, each file occupies a set of contiguous blocks on disk. It is therefore defined by disk address and size of the file.  
+Accessing files is easy in this approach, but finding space for a new file is a problem. It also suffers from the problem of *external fragmentation*. This is sometimes fixed by copying the files to another disk and then copying them back, compacting all the free space into one hole.  
+This also causes problems with extending file space. The only way is to copy the file to a large enough pre-existing space.  
+Some systems divide files into contiguous chunks called *extents* to resolve these issues.
+
+#### Linked Allocation
+Each file in linked allocation is a linked list of disk blocks, which may be scattered anywhere. This avoids external fragmentation, and can be used for arbitrary-size files.
+
+The main problems with linked allocation are that it can only be used for sequential access, and that the pointers take up disk space. The latter issue is resolved by using *clusters* of blocks rather than single ones.  
+Reliability is another issue – all the pointers need to remain intact for the file to be accessible.  
+
+A *file access table* (FAT), which stores the next block for each block in the table, is an important variation on the linked allocation approach. Unless the FAT is cached, however, it can make sequential file access inefficient.
+
+#### Indexed Allocation
+Indexed allocation brings all the pointers of linked allocation into one location, the *index block*. A file's index block is an array of disk addresses. This supports direct access without suffering from fragmentation.
+
+However, it does waste space, since the index block is of fixed size. To deal with this, there are multiple options:
+
+* Linking: Multiple index blocks can be linked together for large files.
+* Multilevel indexing
+* Combined: A certain number of pointers point to data; the last three point to an indirect block, a double indirect block, and a triple indirect block.
+
+#### Performance
+For any type of access, contiguous allocation requires just one access to retrieve a disk block. Linked allocation works for sequential access, but requires $i$ disk reads for accessing the $i^\text{th}$ block. Some systems allow both these allocation methods, depending on the type of access (declared at creation time).
+
+Indexed allocation may allow for direct access, if the block is already in memory (which it may not be). For multilevel indexing, this could be very expensive; it is also affected by the position of the block. Some systems combine it with contiguous allocation, by using the latter for smaller files and switching to the former if the file becomes bigger.
+
+### 12.5 Free-Space Management
+Space from deleted files should be used for new files wherever possible, since disk space is limited. The system maintains a free-space list for this purpose; this list can be implemented in a number of ways.
+
+#### Bit Vector
+Each block is represented by a bit, which is set if the block is free and cleared otherwise. This is, however, inefficient.
+
+#### Linked List
+Each free block points to another, and a pointer to the first one is stored in a special location.
+
+#### Grouping
+A modification of the linked-list approach is to store the addresses of $n$ free blocks in the first one, and the next $n$ in the last one addressed by the first.
+
+#### Counting
+Since blocks are typically allocated and freed contiguously, we can store the address of the first free block and the number of free contiguous blocks following it. These can be stored in a balanced tree for efficiency.
+
+#### Space Maps
+Oracle's ZFS file system creates metaslabs, which divide the space on the device into manageable chunk, and each of which has an associated space map. This is a log of block activity in time order, in counting format, implemented as a balanced tree.
+
+### 12.6 Efficiency and Performance
+There are a variety of techniques to improve the efficiency and performance of disks.
+
+#### Efficiency
+The UNIX allocation algorithm tried to keep a file's data blocks next to its inode block, to reduce seek time. It improves performance by preallocating inodes spread across the volume.  
+The clustering scheme discussed in Section 12.4 can reduce its internal fragmentation problem, by varying cluster sizes depending on file size.  
+
+#### Performance
+Some systems maintain a section of the main memory for a *buffer cache*, to store memory blocks. Other systems use a *page cache*. These can be combined into a *unified buffer cache* – this avoids double caching and allows the virtual memory to handle file-system data.
+
+Writes to the file system are another factor in performance – they can be synchronous or asynchronous.
+
+Sequential access, specifically, can be optimised by *free-behind* (remove a page from the buffer as soon as the next one is requested) and *read-ahead* (read and cache a requested page and subsequent ones).
+
+Output to disk through the file system is often faster than input for large transfers, since output is written to the cache and the disk is written asynchronously.
+
+### 12.7 Recovery
+A system crash can cause inconsisties in file-system data structures storred on disk. This can happen if the disk is not updated from cache, or if the system crashes during a complicated operation like file creation.
+
+#### Consistency Checking
+Instead of always checking the consistency of a system at boot time, a *status* bit is used to record if the metadata is being changed or not. If it is set at boot time, a consistency checker is run – this compares the data in the directory structure with the data blocks on disk and tries to fix anomalies.
+
+#### Log-Structured File Systems
+The inconsistency encountered may be irreparable, so we want to try to prevent the system from breaking in the first place. Log-based recovery techniques involve writing all metadata changes sequentially to a log, which is in fact a *circular buffer*.  
+As the change is written to the log, it is considered to be committed, and the system replays the entries asynchronously, updating a pointer to indicate which transactions are complete. The log is stored in a separate section of the file system or a separate disk spindle.
+
+All the recovery needed after a file system crash now, therefore, is undoing the changes carried out by the transaction that was aborted. A side benefit is that updates are much faster now, since they are only written to the logging area.
+
+#### Other Solutions
+Some file systems use an approach where a transaction writes all data and metadata changes to a new block, and the pointers are updated to point to this block. Some other systems incorporate a checksummer, which assures that data is always consistent.
+
+#### Backup and Restore
+Backups can occur incrementally, where we only back up the files that have been edited since the previous backup. This method can restore an entire disk without backing it up more than once in $N$ days.
+
+### 12.8 NFS
+#### Overview
+NFS sees a set of workstations as independent machines with independent file systems; it aims to allow file sharing in a transparent manner. Sharing is based is based on a client-server model.
+
+To access the remote directory, the client must first mount it over its local file system. Once this is done, client machine users can access the files in this directory transparently. Note that mounting is not transitive.
+
+#### The Mount Protocol
+The mount protocol establishes the logical connection between the server and the client. The mounting operation includes the name of the remote directory and the server machine name; the request is mapped to an RPC and forwarded to the mount server. The server maintains an export list, which specifies which machines can mount which local file systems.
+
+#### The NFS Protocol
+There is a set of RPCs for file operations. It supports searching for a file, reading a set of directory entries, manipulating links and directories, accessing file attributes, and reading and writing files.
+
+NFS servers are stateless – they do not maintain information about their clients between accesses. An implication of this is that server writes must be synchronous; the benefits of caching are lost. This can be solved by using a nonvolatile cache independent of the server machine.
+
+A single NFS `write()` call is atomic, but it may be mixed up with other users' calls.
+
+NFS is integrated into the VFS – the VFS layer identifies the remoteness of the call and invokes the corresponding NFS RPC.
+
+#### Path-Name Translation
+A separate NFS lookup call is performed for each directory vnode in the path name. Once a mount point is crossed, every component lookup causes a separate RPC – however, this is extremely inefficient.  
+For this reason, the client machine maintains a directory-name-lookup cache.
+
+#### Remote Operations
+There are two caches – the inode-information cache and the file-blocks cache. When a file is opened, the kernel matches the cached attributes with the remote server; the cached file blocks are used only if the attributes are up to date.
+
+The consistency semantics of NFS are difficult to characterise. New files created on a machine may not be visible outside for some time, for example, and writes to a file at one site may not be visible to others that have the file open for reading.
+
+### 12.9 Example: The WAFL File System
+
+### 12.10 Summary
