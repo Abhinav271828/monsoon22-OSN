@@ -1932,3 +1932,121 @@ The consistency semantics of NFS are difficult to characterise. New files create
 ### 12.9 Example: The WAFL File System
 
 ### 12.10 Summary
+
+## Chapter 13: I/O Systems
+In computer I/O, the OS is reponsible for managing and controlling I/O operations and devices.
+
+### 13.1 Overview
+Various methods are needed to control different I/O devices. These methods form the I/O subsystem of the kernel.  
+The kernel uses device-driver modules, which present a uniform interface to access the drivers to the I/O subsystem.
+
+### 13.2 I/O Hardware
+A device communicates with a machine using a connection point called a *port*.  
+if the devices share a set of wires, it is called a *bus* – buses have a protocol that specifies the set of messages that can be sent along them. There are different kinds of buses, like the PCI bus for fast devices and the expansion bus for slower ones.
+
+A controller is a system to operate a port, bus, or device. The processor communicates with a controller by reading and writing bit patterns in its registers, or by memory-mapped I/O. Both of these may also be implemented together.
+
+An I/O port usually contains four registers: the data-in (read by the host for input), data-out (written by the host for output), status (*e.g.*, completed, input available, error, etc.), and control (written by the host for commands).
+
+#### Polling
+The basic notion of handshaking is simple: the controller maintains a `busy` bit and the host a `command-ready` bit. The host polls the `busy` bit, waiting for the controller to be free. This process is inefficient if it rarely succeeds; *interrupts* fix this.
+
+#### Interrupts
+The CPU hardware has a wire called the *interrupt-request line* that the CPU checks after every instruction; if it identifies a signal, it saves the state and jumps to the interrupt-handler routine, which eventually returns to the next instruction.
+
+There are some important considerations, however:
+
+* Interrupt handling needs to be deferred during critical processing.
+* The proper interrupt handler needs to be called without having to poll all devices.
+* We need to distinguish between interrupts based on priority.
+
+CPUs usually have one nonmaskable and one maskable interrupt lines.
+
+The interrupt mechanism takes an address, which is used to select a handler from a table called an *interrupt vector*.  
+Interrupts also have *priority levels*. For example, software interrupts or *traps* have relatively low priority.
+
+#### Direct Memory Access
+Many systems offload some of the programmed I/O work to a DMA controller. The CPU simply transfers I/O instructions to the DMA controller and proceeds with other work; the DMA then operates on the bus directly.  
+The DMA controller and device controller perform handshaking using a request and an acknowledge wire. The DMA interrupts the CPU when the transfer is ready.
+
+#### I/O Hardware Summary
+
+### 13.3 Application I/O Interface
+The device-driver layer is uesd to hide the differences among device controllers from the I/O subsystem of the kernel.  
+Devices can vary in many ways:
+
+* character-stream or block
+* sequential or random access
+* synchronous or asynchronous
+* sharable or dedicated
+* speed
+* read? write?
+
+#### Block and Character Devices
+The block-device interface covers the interface for disk drives and other block-oriented devices – they are expected to understand `read()`, `write()` and `seek()` (if they are random-access).  
+If the OS prefers to access the device as a simple linear array, this is called *raw I/O*; if the application overrides the OS's buffering and locking, it is called *direct I/O*.
+
+Memory-mapped file access can be layered on top of block-device drivers.
+
+A keyboard is an example of a device with a character-stream interface. The basic syscalls in this case are `get()` and `put()`.
+
+#### Network Devices
+One interface for network devices is the *socket* interface. It provides the syscalls to create and manage sockets.
+
+#### Clocks and Timers
+Hardware clocks and timers usually provide three basic functions – give the current time, give the elapsed time, and set a timer to trigger an operation at a certain time (a programmable interval timer).
+
+#### Nonblocking and Asynchronous I/O
+When an application issues a blocking syscall, its execution is suspended; it is moved to a wait queue until the call is completed. Some user-level processes use nonblocking I/O also, however – this can be implemented by multithreading if the OS does not provide nonblocking syscalls.
+
+#### Vectored I/O
+Vectored I/O allows one syscall to perform multiple I/O operations involving multiple locations.
+
+### 13.4 Kernel I/O Subsystem
+#### I/O Scheduling
+The I/O scheduler rearranges the order of the queue of I/O requests for a device.  
+When a kernel supports asynchronous I/O, it must keep track of many requests simultaneously – it may then attach the wait queue to a device-status table.
+
+#### Buffering
+Buffering is done for three reasons: a speed mismatch between a consumer and a producer, to provide adaptations between devices with different transfer sizes, and to support copy semantics for application I/O.
+
+#### Caching
+A cache is a region of fast memory (it differs from a buffer in that it only holds a copy).
+
+#### Spooling and Device Reservation
+A spool is a buffer that holds output for a device hat cannot accept interleaved data streams. Each stream is spooled to a separate file, and all the files are queues to the device.
+
+#### Error Handling
+As a general rule, an I/O syscall returns one bit indicating the status of the call, and indicate what the error was if one occurred.
+
+#### I/O Protection
+All I/O instructions are privileged instructions, so users cannot issue them directly. The OS checks if a user I/O request is valid or not before performing it.
+
+#### Kernel Data Structures
+
+#### Kernel I/O Subsystem Summary
+
+### 13.5 Transforming I/O Requests to Hardware Operations
+MS-DOS uses a colon separator to delimit the device name from the path.  
+UNIX has a mount table that is used to look up path name prefixes and obtain device names.
+
+A typical blocking read request begins with a correctness check by the kernel, and a return if the data is available in the cache. If it is not, physical I/O is performed – the process is placed on the wait queue and the I/O request is scheduled.  
+When the request is sent, kernel buffer space is allocated, the device performs the transfer, interrupts the driver, and control is returned.
+
+### 13.6 STREAMS
+A stream is a connection between a device driver and a user process. It consists of a stream head (on the process side), a driver end (on the device side), and 0+ stream modules in between. These are pushed onto a stream by the `ioctl()` syscall. A stream may implement *flow control* between modules to prevent overflow.
+
+The user process delivers the data of a message to the queue for the next module, until it reaches the driver end and hence the device.
+
+STREAMS is nonblocking, except when the user process communicates with the stream head.  
+The driver end must respond to interrupts, such as when a frame is ready to be read. It must handle all incoming data.
+
+STREAMS's main benefit is a modular and incremental approach to handling device drivers.
+
+### 13.7 Performance
+Interrupt handling is an expensive task, so programmed I/O can be more efficient.  
+Network traffic can also cause a high context-switch rate.
+
+Some systems use front-end processors for terminal I/O to reduce the interrupt burden on the CPU.
+
+### 13.8 Summary
